@@ -2,13 +2,37 @@
 
 # source('static/post/2019-01-11-reverse-polish-notation-parsing-in-r_files/rpn.R')
 
-# We're going to loop through the body, and record start and end lines of
+# We're going to loop through the body, and record start lines of
 # the expressions.  Multi-line expressions are split into sub-expressions.
 # This is lazy as it only works correctly if all expressions except
 # "{" expressions like if, while, etc., are single line.
+#
+# In order to do this
+# properly we would have to explicitly detect all "{" expressions explicitly
+# to only recurse on those, but doing so requires conditionally peeking down two
+# levels looking for a "{" (check if "while/repeat/for", and if so, look for
+# "expr", and look at child to see if it starts with "{").
 
 src_lines <- function(x, dat) {
-  sub <- subset(dat, parent == x & token == 'expr')
+  if(any(dat[['token']] == 'exprlist'))
+    stop('exprlist not supported (expressions with ";" in them')
+
+  control <- c('FOR', 'WHILE', 'IF', 'REPEAT')
+  sub <- subset(
+    dat, parent == x & token == 'expr' | token %in% constrol
+  )
+  if(control %in% sub[['token']]) {
+    if(identical(sub[['token']][[1]], 'IF')) {
+      # need to detect ELSE case?
+    } else if (identical(sub[['token']][[1]], 'FOR')) {
+    } else if (identical(sub[['token']][[1]], 'WHILE')) {
+    } else if (identical(sub[['token']][[1]], 'REPEAT')) {
+      stop("`repeat` is not currently a handled control structure.")
+    } else {
+      stop("unexpected parse data structure")
+    }
+
+  }
   rows <- nrow(sub)
   res <- vector('list', rows)
 
@@ -17,8 +41,6 @@ src_lines <- function(x, dat) {
       with(sub[i,], if(line2 - line1 > 0) src_lines(id, dat) else line1)
   res
 }
-# Track the monitored values, i, L, and udpate their display when they
-# change.
 
 enmonitor_one <- function(lang, line) {
   call(
@@ -28,17 +50,64 @@ enmonitor_one <- function(lang, line) {
     quote(.res)                                # return temporary value
   )
 }
+# Important for `code` and `ln` to be aligned, so we need `src_lines` to
+# correctly determine which elements are nesting vs not, and `enmonitor` to
+# correctly skip the parts that are not part of the nesting.
+#
+# Most annoying thing here is the difference between `for` and `if/while`, and
+# to a lesser extent the differnce between if and if/else (else if is just a
+# nested if/else).
+#
+# Here we compare language objects to the corresponding parse data:
+#
+# for-language (for(i in x) body):
+#
+# 1. `for`
+# 2. `i`                    # skip
+# 3. `x`                    # skip
+# 4. `body`
+#
+# for-dat, subset to FOR/forcond/expr
+#
+# 1. FOR
+# 2. forcond "(i in x)"     # skip
+# 3. body
+#
+# ifelse-language (if(a) b else c)
+#
+# 1. `if`
+# 2. `a`                    # skip
+# 3. `b`
+# 4. `c`                    # optional?
+#
+# ifelse-dat, subset to IF/expr
+#
+# 1. IF
+# 2. a                      # skip
+# 3. b
+# 4. c                      # optional?
+#
+# while is like ifelse without the else, repeat probably similar.
+#
+# We need logic to skip the right elements when computing start lines, and
+# also when "enmonitoring" them.
+
+
 enmonitor <- function(code, ln) {
   i <- j <- 1
   while(i <= length(code)) {
     while(
       is.name(code[[i]]) &&
-      as.character(code[[i]]) %in% c("{", "while", "if")
-    )
-      i <- i + 1
+      as.character(code[[i]]) %in% c("{", "while", "if", "for")
+    ) {
+      # Skip the expression
+      i <- i + 1 + (as.character(code[[i]]) == "for") * 2
+    }
     code[[i]] <- if(is.numeric(ln[[j]])) {
+      # top level statement, monitor the element
       enmonitor_one(code[[i]], ln[[j]])
     } else {
+      # not top level, so recurse
       enmonitor(code[[i]], ln[[j]])
     }
     i <- i + 1
@@ -118,13 +187,19 @@ make_refresh_display <- function(src, idx.name, L.name, delay=delay) {
     )
   }
 }
-explain <- function(fun, delay=getOption('explain.delay')) {
+#' Modify a function to be watched
+#'
+#' @export
+
+watch <- function(fun, delay=getOption('explain.delay')) {
   fun.name <- substitute(fun)
   stopifnot(is.name(fun.name))
   fun.name.chr <- as.character(fun.name)
 
   dat <- getParseData(fun)
   stopifnot(nrow(dat) > 0)
+
+  # find function body in parse data
 
   symb.parent <- subset(dat, text==fun.name.chr & token == 'SYMBOL')$parent
   expr.parent <- subset(dat, id == symb.parent)$parent
