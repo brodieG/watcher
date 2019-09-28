@@ -1,45 +1,45 @@
-# This works if wd is the website
 
-# source('static/post/2019-01-11-reverse-polish-notation-parsing-in-r_files/rpn.R')
-
+# Compute Start Line of Each Top-Level Expression
+#
 # We're going to loop through the body, and record start lines of
 # the expressions.  Multi-line expressions are split into sub-expressions.
 # This is lazy as it only works correctly if all expressions except
 # "{" expressions like if, while, etc., are single line.
 #
-# In order to do this
-# properly we would have to explicitly detect all "{" expressions explicitly
-# to only recurse on those, but doing so requires conditionally peeking down two
-# levels looking for a "{" (check if "while/repeat/for", and if so, look for
-# "expr", and look at child to see if it starts with "{").
+# In order to do this properly we would have to explicitly detect all "{"
+# expressions explicitly to only recurse on those, but doing so requires
+# conditionally peeking down two levels looking for a "{" (check if
+# "while/repeat/for", and if so, look for "expr", and look at child to see if
+# it starts with "{").
+#
+# @param dat parse data as produced by `getParseData`
+# @param x an id from the parseData `dat` that we wish to examine the children
+#   of.
+# @return a nested list that mimics the structure of the language object that
+#   produced the parse data
 
 src_lines <- function(x, dat) {
   if(any(dat[['token']] == 'exprlist'))
     stop('exprlist not supported (expressions with ";" in them')
 
-  control <- c('FOR', 'WHILE', 'IF', 'REPEAT')
-  sub <- subset(
-    dat, parent == x & token == 'expr' | token %in% constrol
-  )
-  if(control %in% sub[['token']]) {
-    if(identical(sub[['token']][[1]], 'IF')) {
-      # need to detect ELSE case?
-    } else if (identical(sub[['token']][[1]], 'FOR')) {
-    } else if (identical(sub[['token']][[1]], 'WHILE')) {
-    } else if (identical(sub[['token']][[1]], 'REPEAT')) {
-      stop("`repeat` is not currently a handled control structure.")
-    } else {
-      stop("unexpected parse data structure")
-    }
+  x.dat <- dat[dat[['id']] == x, ,drop=FALSE]
+  if(nrow(x.dat) != 1L || !identical(x.dat[['token']], 'expr'))
+    stop("Can only compute `src_lines` on 'expr' tokens")
 
+  sub <- subset(dat, parent == x)
+  if(!nrow(sub)) stop("no children for ", x)
+  sub.start <- sub[['token']][1L]
+  ctrl.if <- c('WHILE', 'IF')
+  if(sub.start %in% c(ctrl.if, "'{'", 'FOR', 'REPEAT')) {
+    sub.expr <- subset(sub, token == 'expr')
+    if(sub.start %in% ctrl.if) sub.expr <- sub.expr[-1L,,drop=FALSE]
+    rows <- nrow(sub.expr)
+    res <- vector('list', rows)
+    for(i in seq_len(rows)) res[[i]] <- src_lines(sub.expr[['id']][[i]], dat)
+    res
+  } else {
+    x.dat[['line1']]
   }
-  rows <- nrow(sub)
-  res <- vector('list', rows)
-
-  for(i in seq_len(rows))
-    res[[i]] <-
-      with(sub[i,], if(line2 - line1 > 0) src_lines(id, dat) else line1)
-  res
 }
 
 enmonitor_one <- function(lang, line) {
