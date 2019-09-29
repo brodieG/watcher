@@ -92,16 +92,20 @@ enmonitor_one <- function(lang, line) {
 # We need logic to skip the right elements when computing start lines, and
 # also when "enmonitoring" them.
 
+# Big difference between '{' and the control structures, as for this one
+# the call itself contains everything, whereas for the others??  I guess it's
+# the same, except you have 'if' instead of '{', and then you have to skip stuff 
 
 enmonitor <- function(code, ln) {
   i <- j <- 1
   while(i <= length(code)) {
-    while(
-      is.name(code[[i]]) &&
-      as.character(code[[i]]) %in% c("{", "while", "if", "for")
-    ) {
-      # Skip the expression
-      i <- i + 1 + (as.character(code[[i]]) == "for") * 2
+    if(is.name(code[[i]])) {
+      # control structures need to skip their control portion
+      symb <- as.character(code[[i]])
+      i <- i +
+        1 * (symb %in% c('{', 'repeat')) +
+        2 * (symb %in% c('if', 'while')) +
+        3 * (symb == 'for')
     }
     code[[i]] <- if(is.numeric(ln[[j]])) {
       # top level statement, monitor the element
