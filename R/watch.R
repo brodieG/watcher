@@ -41,13 +41,39 @@ src_lines <- function(x, dat) {
     x.dat[['line1']]
   }
 }
+watch.data <- new.env()
+
+#' Manage Watch Data
+#'
+#' Functions to collect and process watch data.
+#'
+#' @export
+
+watch_data <- function() {
+  watch.data[['data']]
+}
+#' @rdname watch_data
+#' @export
+
+watch_init <- function() {
+  watch.data[['data']] <- list()
+}
+#' @rdname watch_data
+#' @export
+
+capture_data <- function(env, line) {
+  dat <- as.list(env)
+  attr(dat, 'line') <- line
+  watch.data[['data']] <- append(watch.data[['data']], list(dat))
+  invisible(NULL)
+}
 
 enmonitor_one <- function(lang, line) {
   call(
     '{',
-    call('<-', quote(.res), call("(", lang)),  # eval and temporarily store
-    bquote(refresh_display(.(line))),          # update debug display
-    quote(.res)                                # return temporary value
+    call('<-', quote(.res), call("(", lang)),
+    bquote(watcher::capture_data(environment(), .(line))),
+    quote(.res)
   )
 }
 # Important for `code` and `ln` to be aligned, so we need `src_lines` to
@@ -215,12 +241,15 @@ watch <- function(fun, delay=getOption('explain.delay')) {
     src.ln, function(x) x - min(unlist(src.ln)) + 2, how='replace'
   )
   fun2 <- fun
-  body(fun2) <- enmonitor(body(fun), src.ln)
-
-  refresh_display <- make_refresh_display(
-    deparse(fun, control='all'), 'i', 'L', delay=delay
-  )
-  environment(fun2) <- environment()
+  fun.body.raw <- enmonitor(body(fun), src.ln)
+  fun.body <- quote({
+    watcher::watch_init()
+    res <- NULL
+    attr(res, 'watch.data') <- watcher::watch_data()
+  })
+  fun.body[[3L]][[3L]] <- fun.body.raw
+  body(fun2) <- fun.body
+  environment(fun2) <- environment()   # is this right?  Doesn't seem so
   fun2
 }
 ## Helper funs
