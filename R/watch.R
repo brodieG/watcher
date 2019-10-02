@@ -145,78 +145,6 @@ enmonitor <- function(code, ln) {
   }
   code
 }
-make_refresh_display <- function(src, idx.name, L.name, delay=delay) {
-  L.old <- i.chr.init <- character()
-  idx.old <- 0
-
-  fun <- function(n) {
-    if(!length(L.old)) writeLines(c('\n', src))
-    L <- try(get(L.name, envir=parent.frame(), inherits=FALSE), silent=TRUE)
-    idx <- try(get(idx.name, envir=parent.frame(), inherits=FALSE), silent=TRUE)
-
-    if(inherits(L, 'try-error')) L <- list()
-    if(inherits(idx, 'try-error')) idx <- 0
-
-    L.chr <-
-      paste0(" ", vapply(L, deparse, width.cutoff=500, character(1L)), " ")
-    i.chr.pre <- i.chr <- if(!length(i.chr.init)) {
-      i.chr.init <<- sprintf("[[%s]]:", seq_along(L))
-      i.chr.init
-    } else i.chr.init
-
-    stopifnot(length(L.chr) <= length(src))
-
-    del <- which(!L.old %in% L.chr)   # sloppy, only works for unique
-    ins <- which(!L.chr %in% L.old)
-
-    L.chr.pre <- L.old
-    length(L.chr.pre) <- length(L.chr) <- length(i.chr) <- length(i.chr.pre) <-
-      length(src) - 1L
-    L.chr[is.na(L.chr)] <- ""
-    L.chr.pre[is.na(L.chr.pre)] <- ""
-    i.chr[is.na(i.chr)] <- ""
-    i.chr.pre[is.na(i.chr.pre)] <- ""
-
-    idx.ch <- isTRUE(idx != idx.old)
-    flash <- length(del) > 0 || length(ins) > 0 || idx.ch
-
-    if(idx.old) i.chr.pre[idx.old] <-
-      sprintf("\033[7m%s\033[m", i.chr.pre[idx.old])
-    if(idx) i.chr[idx] <-
-      sprintf("\033[7%sm%s\033[m", if(!idx.ch) "" else ";93", i.chr[idx])
-    src <- src.pre <- format(src)
-    src.pre[n] <- sprintf("\033[7m%s\033[m", src[n])
-    src[n] <- sprintf("\033[7%sm%s\033[m", if(!flash) "" else ";93", src[n])
-
-    # Before, highlighting what's about to change
-
-    L.chr.pre[del] <- sprintf("\033[93;7m%s\033[m", L.chr.pre[del])
-
-    if(flash)
-      redraw(
-        paste0(
-          pad(src.pre), "  ",
-          pad(c('`L`', i.chr.pre)),
-          pad(c('', L.chr.pre))
-        ),
-        delay
-      )
-    # After
-
-    L.old <<- L.chr[nzchar(L.chr)]
-    idx.old <<- idx
-
-    if(length(ins)) L.chr[ins] <- sprintf("\033[93;7m%s\033[m", L.chr[ins])
-    redraw(
-      paste0(
-        pad(src), "  ",
-        pad(c('`L`', i.chr)),
-        pad(c('', L.chr))
-      ),
-      delay
-    )
-  }
-}
 #' Modify a function to be watched
 #'
 #' @export
@@ -260,21 +188,3 @@ pad <- function(x) {
   chars <- nchar2(x)
   paste0(x, strrep(" ", max(chars) - chars))
 }
-reset <- function(rows, cols) {
-  whiteout <- rep(strrep(" ", cols), rows)
-  cat(sprintf("\033[%dA\r", rows))
-  writeLines(whiteout)
-  cat(sprintf("\033[%dA\r", rows))
-}
-redraw <- function(out, delay) {
-  reset(length(out) + 1, max(nchar2(out)))
-  writeLines(out)
-  delay_call(delay)
-}
-delay_call <- function(delay) {
-  if(is.function(delay)) delay() else {
-    if(!is.numeric(delay)) delay <- .75
-    Sys.sleep(delay)
-    cat('\n')
-} }
-
