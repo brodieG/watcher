@@ -4,7 +4,7 @@
 \alias{watch}
 \title{Modify a function to be watched}
 \usage{
-watch(fun, delay = getOption("explain.delay"))
+watch(fun, vars = character())
 }
 \description{
 Modify a function to be watched

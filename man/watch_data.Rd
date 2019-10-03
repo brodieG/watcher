@@ -8,7 +8,7 @@
 \usage{
 watch_data()
 
-watch_init()
+watch_init(vars)
 
 capture_data(env, line)
 }

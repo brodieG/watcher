@@ -55,17 +55,53 @@ watch_data <- function() {
 #' @rdname watch_data
 #' @export
 
-watch_init <- function() {
+watch_init <- function(vars) {
   watch.data[['data']] <- list()
+  watch.data[['vars']] <- vars
 }
 #' @rdname watch_data
 #' @export
 
 capture_data <- function(env, line) {
-  dat <- as.list(env)
+  dat <- if(length(watch.data[['vars']])) {
+    env.vars <- ls(envir=env)
+    mget(intersect(watch.data[['vars']], env.vars), envir=env, inherits=FALSE)
+  } else as.list(env)
+
   attr(dat, 'line') <- line
   watch.data[['data']] <- append(watch.data[['data']], list(dat))
   invisible(NULL)
+}
+#' Simplify Watch Data
+#'
+#' Scalar values are simplified to vectors, everything else to list
+#'
+#' @export
+
+simplify_data <- function(dat) {
+  lines <- vapply(dat, `attr`, numeric(1L), 'line')
+  vars <- unique(unlist(lapply(dat, names)))
+  scalar <- setNames(!logical(length(vars)), vars)
+  res <- setNames(vector('list', length(vars)), vars)
+
+  for(i in vars) {
+    for(j in seq_along(dat)) {
+      jval <- dat[[j]]
+      if(i %in% names(jval) && (
+        length(jval[[i]]) != 1L || !is.atomic(jval[[i]])
+      ) ) {
+        scalar[i] <- FALSE
+        break
+  } } }
+  for(i in vars[scalar]) {
+    res[[i]] <-
+      unlist(lapply(dat, function(x) if(!i %in% names(x)) NA else x[[i]]))
+  }
+  for(i in vars[!scalar]) {
+    res[[i]] <- lapply(dat, '[[', i)
+  }
+  res[['.line']] <- lines
+  res
 }
 
 enmonitor_one <- function(lang, line) {
@@ -120,7 +156,7 @@ enmonitor_one <- function(lang, line) {
 
 # Big difference between '{' and the control structures, as for this one
 # the call itself contains everything, whereas for the others??  I guess it's
-# the same, except you have 'if' instead of '{', and then you have to skip stuff 
+# the same, except you have 'if' instead of '{', and then you have to skip stuff
 
 enmonitor <- function(code, ln) {
   i <- j <- 1
@@ -149,7 +185,7 @@ enmonitor <- function(code, ln) {
 #'
 #' @export
 
-watch <- function(fun, delay=getOption('explain.delay')) {
+watch <- function(fun, vars=character()) {
   fun.name <- substitute(fun)
   stopifnot(is.name(fun.name))
   fun.name.chr <- as.character(fun.name)
@@ -171,9 +207,10 @@ watch <- function(fun, delay=getOption('explain.delay')) {
   fun2 <- fun
   fun.body.raw <- enmonitor(body(fun), src.ln)
   fun.body <- quote({
-    watcher::watch_init()
+    watcher::watch_init(vars)
     res <- NULL
     attr(res, 'watch.data') <- watcher::watch_data()
+    res
   })
   fun.body[[3L]][[3L]] <- fun.body.raw
   body(fun2) <- fun.body
