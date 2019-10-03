@@ -1,4 +1,4 @@
-# watch - Watch State of Function
+# watch - Watch State of Function Environment
 
-Tools to watch the state of a function as it evaluates.  This is an experimental
-package.
+Tools to watch the state of a function environment as it evaluates each of its 
+component 'top-level' calls.  This is an experimental package.
