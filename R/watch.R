@@ -74,33 +74,88 @@ capture_data <- function(env, line) {
 }
 #' Simplify Watch Data
 #'
-#' Scalar values are simplified to vectors, everything else to list
+#' Watch data is returned in a list with one element per step of the function
+#' evaluation, which is awkward if we want to manipulate the data across steps.
+#' This function will simplify variables that are either missing or always of
+#' the same type according to the following rules:
 #'
+#' * Scalar values are turned into vectors, NA entries when the variable is not
+#'   present (e.g. when function begins evaluation in variable is not defined
+#'   yet)
+#' * Vectors are turned into data frames with columns .id, .line added.
+#' * Matrices are turned into data frames with columns .id, .line, x, y, val,
+#'   where .id is the step id and .line is the code line number.
+#' * Data frames are rbinded and gain .id and .line variables, if those
+#'   variables already exist they will be over-written.
+#'
+#' Variables that change types are just stored in their original format in the
+#' list, except for scalars that change to vectors and vice versa, which are
+#' treated as vectors.
+#'
+#' Not optimized for speed.
+#'
+#' @param dat list data produced by a [watch()]ed function.
+#' @return list with elements 'scalar', 'matrix', 'data.frame', and 'other',
+#'   each of those with sub-elements, each of those of the simplified type as in
+#'   the description.
 #' @export
 
 simplify_data <- function(dat) {
   lines <- vapply(dat, `attr`, numeric(1L), 'line')
   vars <- unique(unlist(lapply(dat, names)))
-  scalar <- setNames(!logical(length(vars)), vars)
-  res <- setNames(vector('list', length(vars)), vars)
+  type <- setNames(character(length(vars)), vars)
 
   for(i in vars) {
     for(j in seq_along(dat)) {
       jval <- dat[[j]]
-      if(i %in% names(jval) && (
-        length(jval[[i]]) != 1L || !is.atomic(jval[[i]])
-      ) ) {
-        scalar[i] <- FALSE
-        break
-  } } }
-  for(i in vars[scalar]) {
+      if(i %in% names(jval)) {
+        type.tmp <- if(is.matrix(jval[[i]]))
+          'matrix'
+        else if(length(jval[[i]]) == 1L && is.atomic(jval[[i]]))
+          'scalar'
+        else if(is.atomic(jval[[i]]))
+          'vector'
+        else if(is.data.frame(jval[[i]]))
+          'data.frame'
+        else 'list'
+      }
+      if (type[[i]] == '') {
+        type[[i]] <- type.tmp
+      } else if (type[[i]] != type.tmp) {
+        if(all(c(type[[i]], type.tmp) %in% c('scalar', 'vector'))) {
+          type[[i]] <- 'vector'
+        } else {
+          type[[i]] <- 'list'
+          break
+        }
+      }
+  } }
+  stopifnot(all(nzchar(type)))
+  res <- setNames(vector('list', length(vars) + 1L), c('.line', vars))
+  res[['.line']] <- lines
+  for(i in vars[type == 'scalar']) {
     res[[i]] <-
       unlist(lapply(dat, function(x) if(!i %in% names(x)) NA else x[[i]]))
   }
-  for(i in vars[!scalar]) {
-    res[[i]] <- lapply(dat, '[[', i)
+  for(i in vars[type == 'matrix']) {
+    tmp <- lapply(
+      seq_along(dat), function(j) {
+        x <- dat[[j]]
+        data.frame(
+          x=c(row(x[[i]])), y=c(row(x[[i]])), val=c(x[[i]]), .id=j
+        )
+      }
+    )
+    res[[i]] <- do.call(rbind, tmp)
   }
-  res[['.line']] <- lines
+  for(i in vars[type == 'data.frame']) {
+    tmp <- lapply(seq_along(dat), function(j) transform(dat[[j]], .id=j))
+    res[[i]] <- do.call(rbind, tmp)
+  }
+  for(i in vars[type == 'vector']) {
+    tmp <- lapply(seq_along(dat), function(j) data.frame(dat[[j]], .id=j))
+    res[[i]] <- do.call(rbind, tmp)
+  }
   res
 }
 
