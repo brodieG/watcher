@@ -3,14 +3,9 @@
 #
 # We're going to loop through the body, and record start lines of
 # the expressions.  Multi-line expressions are split into sub-expressions.
-# This is lazy as it only works correctly if all expressions except
-# "{" expressions like if, while, etc., are single line.
 #
-# In order to do this properly we would have to explicitly detect all "{"
-# expressions explicitly to only recurse on those, but doing so requires
-# conditionally peeking down two levels looking for a "{" (check if
-# "while/repeat/for", and if so, look for "expr", and look at child to see if
-# it starts with "{").
+# Definitely not fully robust, in particular to exprlist tokens (i.e. those
+# produced by `;` delimited expressions).
 #
 # @param dat parse data as produced by `getParseData`
 # @param x an id from the parseData `dat` that we wish to examine the children
@@ -19,24 +14,20 @@
 #   produced the parse data
 
 src_lines <- function(x, dat) {
-  if(any(dat[['token']] == 'exprlist'))
-    stop('exprlist not supported (expressions with ";" in them')
-
   x.dat <- dat[dat[['id']] == x, ,drop=FALSE]
-  if(nrow(x.dat) != 1L || !identical(x.dat[['token']], 'expr'))
-    stop("Can only compute `src_lines` on 'expr' tokens")
-
   sub <- subset(dat, parent == x)
   if(!nrow(sub)) stop("no children for ", x)
   sub.start <- sub[['token']][1L]
   ctrl.if <- c('WHILE', 'IF')
-  if(sub.start %in% c(ctrl.if, "'{'", 'FOR', 'REPEAT')) {
-    sub.expr <- subset(sub, token == 'expr')
+  sub.expr <- subset(sub, token == 'expr')
+  if(sub.start %in% c(ctrl.if, "'{'", 'FOR', 'REPEAT') & nrow(sub.expr) > 0) {
     if(sub.start %in% ctrl.if) sub.expr <- sub.expr[-1L,,drop=FALSE]
-    rows <- nrow(sub.expr)
-    res <- vector('list', rows)
-    for(i in seq_len(rows)) res[[i]] <- src_lines(sub.expr[['id']][[i]], dat)
+    res <- vector('list', nrow(sub.expr))
+    for(i in seq_len(nrow(sub.expr)))
+      res[[i]] <- src_lines(sub.expr[['id']][[i]], dat)
     res
+  } else if (identical(sub.start, "'{'") && nrow(sub.expr) > 2) {
+    sub.start[2, 'line1']
   } else {
     x.dat[['line1']]
   }
@@ -95,9 +86,10 @@ capture_data <- function(env, line) {
 #' Not optimized for speed.
 #'
 #' @param dat list data produced by a [watch()]ed function.
-#' @return list with elements 'scalar', 'matrix', 'data.frame', and 'other',
-#'   each of those with sub-elements, each of those of the simplified type as in
-#'   the description.
+#' @return list with elements '.scalar' which is a data frame of all the scalar
+#'   variables with one row per step of the function evaluation, and
+#'   additionally, one element per matrix/data.frame variable, and one list
+#'   element for each of all the other variables.
 #' @export
 
 simplify_data <- function(dat) {
@@ -108,8 +100,8 @@ simplify_data <- function(dat) {
   for(i in vars) {
     for(j in seq_along(dat)) {
       jval <- dat[[j]]
-      if(i %in% names(jval)) {
-        type.tmp <- if(is.matrix(jval[[i]]))
+      type.tmp <- if(i %in% names(jval)) {
+        if(is.matrix(jval[[i]]))
           'matrix'
         else if(length(jval[[i]]) == 1L && is.atomic(jval[[i]]))
           'scalar'
@@ -118,7 +110,8 @@ simplify_data <- function(dat) {
         else if(is.data.frame(jval[[i]]))
           'data.frame'
         else 'list'
-      }
+      } else ''
+
       if (type[[i]] == '') {
         type[[i]] <- type.tmp
       } else if (type[[i]] != type.tmp) {
@@ -130,19 +123,28 @@ simplify_data <- function(dat) {
         }
       }
   } }
+
   stopifnot(all(nzchar(type)))
-  res <- setNames(vector('list', length(vars) + 1L), c('.line', vars))
-  res[['.line']] <- lines
+  res.scalar <- setNames(
+    vector('list', sum(type == 'scalar') + 2L),
+    c('.id', '.line', vars[type == 'scalar'])
+  )
   for(i in vars[type == 'scalar']) {
-    res[[i]] <-
+    res.scalar[[i]] <-
       unlist(lapply(dat, function(x) if(!i %in% names(x)) NA else x[[i]]))
   }
+  res.scalar[c('.id', '.line')] <- list(seq_along(lines), lines)
+  res <- setNames(
+    vector('list', length(vars[type != 'scalar']) + 1L),
+    c('.scalar', vars[type != 'scalar'])
+  )
+  res[['.scalar']] <- res.scalar
   for(i in vars[type == 'matrix']) {
     tmp <- lapply(
       seq_along(dat), function(j) {
         x <- dat[[j]]
         data.frame(
-          x=c(row(x[[i]])), y=c(row(x[[i]])), val=c(x[[i]]), .id=j
+          x=c(row(x[[i]])), y=c(col(x[[i]])), val=c(x[[i]]), .id=j
         )
       }
     )
@@ -216,20 +218,27 @@ enmonitor_one <- function(lang, line) {
 enmonitor <- function(code, ln) {
   i <- j <- 1
   while(i <= length(code)) {
-    if(is.name(code[[i]])) {
-      # control structures need to skip their control portion
+    if(is.name(code[[i]]) && (length(ln) > 1L || is.list(ln))) {
+      # control structures need to skip their control portion, though
+      # note we don't enter ehere if '{' only contains exprlist
       symb <- as.character(code[[i]])
       i <- i +
         1 * (symb %in% c('{', 'repeat')) +
         2 * (symb %in% c('if', 'while')) +
         3 * (symb == 'for')
     }
-    code[[i]] <- if(is.numeric(ln[[j]])) {
+    if(is.numeric(ln[[j]])) {
       # top level statement, monitor the element
-      enmonitor_one(code[[i]], ln[[j]])
+      if(identical(as.character(code[[i]]), '{')) {
+        # special case of `{` containing exprlist (hack alert)
+        code <- enmonitor_one(code, ln[[j]])
+        break
+      } else {
+        code[[i]] <- enmonitor_one(code[[i]], ln[[j]])
+      }
     } else {
       # not top level, so recurse
-      enmonitor(code[[i]], ln[[j]])
+      code[[i]] <- enmonitor(code[[i]], ln[[j]])
     }
     i <- i + 1
     j <- j + 1
@@ -256,9 +265,13 @@ watch <- function(fun, vars=character()) {
   func.body.id <- max(subset(dat, parent == expr.func & token == 'expr')$id)
 
   src.ln <- src_lines(func.body.id, dat)
-  src.ln <- rapply(
-    src.ln, function(x) x - min(unlist(src.ln)) + 2, how='replace'
-  )
+  src.ln <- if(is.list(src.ln)) {
+    rapply(
+        src.ln, function(x) x - min(unlist(src.ln)) + 2, how='replace'
+    )
+  } else {
+    list(src.ln - min(src.ln) + 2)
+  }
   fun2 <- fun
   fun.body.raw <- enmonitor(body(fun), src.ln)
   fun.body <- quote({
