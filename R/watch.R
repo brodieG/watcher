@@ -5,7 +5,8 @@
 # the expressions.  Multi-line expressions are split into sub-expressions.
 #
 # Definitely not fully robust, in particular to exprlist tokens (i.e. those
-# produced by `;` delimited expressions).
+# produced by `;` delimited expressions), which kinda work although line numbers
+# are missreported and other issues.
 #
 # @param dat parse data as produced by `getParseData`
 # @param x an id from the parseData `dat` that we wish to examine the children
@@ -21,10 +22,14 @@ src_lines <- function(x, dat) {
   ctrl.if <- c('WHILE', 'IF')
   sub.expr <- subset(sub, token == 'expr')
   if(sub.start %in% c(ctrl.if, "'{'", 'FOR', 'REPEAT') & nrow(sub.expr) > 0) {
-    if(sub.start %in% ctrl.if) sub.expr <- sub.expr[-1L,,drop=FALSE]
     res <- vector('list', nrow(sub.expr))
-    for(i in seq_len(nrow(sub.expr)))
-      res[[i]] <- src_lines(sub.expr[['id']][[i]], dat)
+    for(i in seq_len(nrow(sub.expr))) {
+      res[[i]] <- if(sub.start %in% ctrl.if && i == 1) {
+        sub.expr[i, 'line1']
+      } else {
+        src_lines(sub.expr[['id']][[i]], dat)
+      }
+    }
     res
   } else if (identical(sub.start, "'{'") && nrow(sub.expr) > 2) {
     sub.start[2, 'line1']
@@ -224,7 +229,7 @@ enmonitor <- function(code, ln) {
       symb <- as.character(code[[i]])
       i <- i +
         1 * (symb %in% c('{', 'repeat')) +
-        2 * (symb %in% c('if', 'while')) +
+        1 * (symb %in% c('if', 'while')) +
         3 * (symb == 'for')
     }
     if(is.numeric(ln[[j]])) {
