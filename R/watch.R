@@ -48,6 +48,7 @@ watch.data <- new.env()
 watch_data <- function() {
   watch.data[['data']]
 }
+
 #' @rdname watch_data
 #' @export
 
@@ -67,112 +68,6 @@ capture_data <- function(env, line) {
   attr(dat, 'line') <- line
   watch.data[['data']] <- append(watch.data[['data']], list(dat))
   invisible(NULL)
-}
-#' Simplify Watch Data
-#'
-#' Watch data is returned in a list with one element per step of the function
-#' evaluation, which is awkward if we want to manipulate the data across steps.
-#' This function will simplify variables that are either missing or always of
-#' the same type according to the following rules:
-#'
-#' * Scalar values are turned into vectors, NA entries when the variable is not
-#'   present (e.g. when function begins evaluation in variable is not defined
-#'   yet)
-#' * Vectors are turned into data frames with columns .id, .line added.
-#' * Matrices are turned into data frames with columns .id, .line, x, y, val,
-#'   where .id is the step id and .line is the code line number.
-#' * Data frames are rbinded and gain .id and .line variables, if those
-#'   variables already exist they will be over-written.
-#'
-#' Variables that change types are just stored in their original format in the
-#' list, except for scalars that change to vectors and vice versa, which are
-#' treated as vectors.
-#'
-#' Not optimized for speed.
-#'
-#' @param dat list data produced by a [watch()]ed function.
-#' @return list with elements '.scalar' which is a data frame of all the scalar
-#'   variables with one row per step of the function evaluation, and
-#'   additionally, one element per matrix/data.frame variable, and one list
-#'   element for each of all the other variables.
-#' @export
-
-simplify_data <- function(dat) {
-  lines <- vapply(dat, `attr`, numeric(1L), 'line')
-  vars <- unique(unlist(lapply(dat, names)))
-  type <- setNames(character(length(vars)), vars)
-
-  for(i in vars) {
-    for(j in seq_along(dat)) {
-      jval <- dat[[j]]
-      type.tmp <- if(i %in% names(jval)) {
-        if(is.matrix(jval[[i]]))
-          'matrix'
-        else if(length(jval[[i]]) == 1L && is.atomic(jval[[i]]))
-          'scalar'
-        else if(is.atomic(jval[[i]]))
-          'vector'
-        else if(is.data.frame(jval[[i]]))
-          'data.frame'
-        else 'list'
-      } else ''
-
-      if (type[[i]] == '') {
-        type[[i]] <- type.tmp
-      } else if (type[[i]] != type.tmp) {
-        if(all(c(type[[i]], type.tmp) %in% c('scalar', 'vector'))) {
-          type[[i]] <- 'vector'
-        } else {
-          type[[i]] <- 'list'
-          break
-        }
-      }
-  } }
-
-  stopifnot(all(nzchar(type)))
-  res.scalar <- setNames(
-    vector('list', sum(type == 'scalar') + 2L),
-    c('.id', '.line', vars[type == 'scalar'])
-  )
-  for(i in vars[type == 'scalar']) {
-    res.scalar[[i]] <-
-      unlist(lapply(dat, function(x) if(!i %in% names(x)) NA else x[[i]]))
-  }
-  res.scalar[c('.id', '.line')] <- list(seq_along(lines), lines)
-  res <- setNames(
-    vector('list', length(vars[type != 'scalar']) + 1L),
-    c('.scalar', vars[type != 'scalar'])
-  )
-  res[['.scalar']] <- res.scalar
-  for(i in vars[type == 'matrix']) {
-    tmp <- lapply(
-      seq_along(dat), function(j) {
-        x <- dat[[j]]
-        data.frame(
-          x=c(row(x[[i]])), y=c(col(x[[i]])), val=c(x[[i]]), .id=j
-        )
-      }
-    )
-    res[[i]] <- do.call(rbind, tmp)
-  }
-  for(i in vars[type == 'data.frame']) {
-    tmp <- lapply(seq_along(dat), function(j) transform(dat[[j]], .id=j))
-    res[[i]] <- do.call(rbind, tmp)
-  }
-  for(i in vars[type == 'vector']) {
-    tmp <- lapply(seq_along(dat), function(j) data.frame(dat[[j]], .id=j))
-    res[[i]] <- do.call(rbind, tmp)
-  }
-  res
-}
-
-enmonitor_one <- function(lang, line) {
-  call(
-    '{',
-    call('<-', quote(.res), call("(", lang)),
-    bquote(watcher::capture_data(environment(), .(line))),
-    quote(.res)
-  )
 }
 # Important for `code` and `ln` to be aligned, so we need `src_lines` to
 # correctly determine which elements are nesting vs not, and `enmonitor` to
@@ -250,51 +145,82 @@ enmonitor <- function(code, ln) {
   }
   code
 }
-#' Modify a function to be watched
+enmonitor_one <- function(lang, line) {
+  call(
+    '{',
+    call('<-', quote(.res), call("(", lang)),
+    bquote(watcher::capture_data(environment(), .(line))),
+    quote(.res)
+  )
+}
+
+#' Instrument a Function for Variable Watching
 #'
+#' The input function will be modified such that the state of the function
+#' environment is captured after each top-level statement is evaluated.  The
+#' modifications are designed to minimize changes in the semantics of the
+#' function with the notable exception that a `.res` variable is used to
+#' temporarily store the result of each top-level statement.  If any such
+#' variable exists in the original function code this could cause conflicts.
+#'
+#' @param fun a function to watch
+#' @param vars character a vector of names of variables to record
+#' @return an instrumented version of `fun`.  When this instrumented function is
+#'   run it will add attributes "watch.data" and "watch.code" to the result.
+#'
+#' @seealso [simplify_data()]j
 #' @export
+#' @examples
+#' insert_sort2 <- watch(insert_sort, c('x', 'i', 'j'))
+#' res <- insert_sort2(runif(10))
+#' dat <- simplify_data(attr(res, 'watch.data'))
+#' code <- attr(res, 'watch.code')
 
 watch <- function(fun, vars=character()) {
+  stopifnot(is.function(fun), is.character(vars), !anyNA(vars))
   fun.name <- substitute(fun)
   stopifnot(is.name(fun.name))
   fun.name.chr <- as.character(fun.name)
 
+  # find function body in parse data.  Pkg funs by default don't keep parse
+  # data, but there are global options that change behavior (search for "keep"
+  # in `?options`.
+
+  code <- deparse(fun, control='all')
   dat <- getParseData(fun)
-  stopifnot(nrow(dat) > 0)
+  if(is.null(dat)) {
+    code[[1]] <- paste0(fun.name.chr, " <- ", code[[1]])
+    dat <- getParseData(parse(text=code))
+  }
+  if(nrow(dat) < 1) stop("Parse data missing.")
 
-  # find function body in parse data
+  symb.parent <-
+    tail(subset(dat, text==fun.name.chr & token == 'SYMBOL'), 1)$parent
+  if(length(symb.parent) != 1)
+    stop("Failed finding parse data for function ", fun.name.chr)
 
-  symb.parent <- subset(dat, text==fun.name.chr & token == 'SYMBOL')$parent
   expr.parent <- subset(dat, id == symb.parent)$parent
   expr.func <- max(subset(dat, parent == expr.parent)$id)
+  expr.func.start <- subset(dat, id == expr.func)[['line1']]
   func.body.id <- max(subset(dat, parent == expr.func & token == 'expr')$id)
 
   src.ln <- src_lines(func.body.id, dat)
   src.ln <- if(is.list(src.ln)) {
-    rapply(
-        src.ln, function(x) x - min(unlist(src.ln)) + 2, how='replace'
-    )
+    rapply(src.ln, function(x) x - expr.func.start + 1L, how='replace')
   } else {
-    list(src.ln - min(src.ln) + 2)
+    list(src.ln - expr.func.start + 1L)
   }
   fun2 <- fun
   fun.body.raw <- enmonitor(body(fun), src.ln)
-  fun.body <- quote({
-    watcher::watch_init(vars)
+  fun.body <- bquote({
+    watcher::watch_init(.(vars))
     res <- NULL
     attr(res, 'watch.data') <- watcher::watch_data()
+    attr(res, 'watch.code') <- .(code)
     res
   })
   fun.body[[3L]][[3L]] <- fun.body.raw
   body(fun2) <- fun.body
-  environment(fun2) <- environment()   # is this right?  Doesn't seem so
+  # environment(fun2) <- environment()   # is this right?  Doesn't seem so
   fun2
-}
-## Helper funs
-
-## pad with spaces accounting for ANSI CSI
-nchar2 <- function(x) nchar(gsub('\033\\[[^m]*m', '', x))
-pad <- function(x) {
-  chars <- nchar2(x)
-  paste0(x, strrep(" ", max(chars) - chars))
 }
