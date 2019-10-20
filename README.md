@@ -54,7 +54,7 @@ each step records a `.id` and `.line` scalar variable representing respectively
 the evaluation step, and the line number in the function it corresponds to.
 This can be used to line up code and state as in this animation:
 
-INSERT GIF.
+![](extra/sort-2.gif)
 
 Unfortunately the process that produces the animation is still quite manual as
 [you can see][].
