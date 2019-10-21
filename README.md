@@ -57,7 +57,7 @@ This can be used to line up code and state as in this animation:
 ![](extra/sort-2.gif)
 
 Unfortunately the process that produces the animation is still quite manual as
-[you can see][].
+[you can see](extra/sort-2.R).
 
 ## Possible Improvements
 
