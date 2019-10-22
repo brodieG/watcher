@@ -41,8 +41,8 @@ function that adds the integers up to `n`:
     ## [1] 55
 
 We can make an instrumented version of it, which will behave mostly as
-the original except the states of the function environment at each
-top-level evaluation step are added to the result as the “watch.data”
+the original except that the variable values at each top-level
+evaluation step are attached to the result as the “watch.data”
 attribute:
 
     seq_sum_w <- watcher::watch(seq_sum)
@@ -71,13 +71,18 @@ data more accessible. For example, scalar variables are turned into
 vectors and returned as members of the “.scalar” data frame in the
 simplified list.
 
+    watch.dat1 <- watcher::simplify_data(watch.dat0)[['.scalar']]
+    head(watch.dat1, 2)
+
+    ##   .id .line x  n  i
+    ## 1   1     2 0 10 NA
+    ## 2   2     4 1 10  1
+
 One possible visualization is to plot variable values vs. evaluation
 step (`.id`):
 
-    suppressPackageStartupMessages(library(ggplot2))
-    watch.dat1 <- watcher::simplify_data(watch.dat0)[['.scalar']]
     watch.melt <- reshape2::melt(watch.dat1[c('.id', 'x', 'i')], id.vars='.id')
-
+    suppressPackageStartupMessages(library(ggplot2))
     ggplot(watch.melt, aes(x=.id, y=value, color=variable)) +
       geom_point()
 
