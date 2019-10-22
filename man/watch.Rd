@@ -12,14 +12,14 @@ watch(fun, vars = character())
 \item{vars}{character a vector of names of variables to record}
 }
 \value{
-an instrumented version of `fun`.  When this instrumented function is
-  run it will add attributes "watch.data" and "watch.code" to the result.
+an instrumented version of \code{fun}.  When this instrumented function is
+run it will add attributes "watch.data" and "watch.code" to the result.
 }
 \description{
 The input function will be modified such that the state of the function
 environment is captured after each top-level statement is evaluated.  The
 modifications are designed to minimize changes in the semantics of the
-function with the notable exception that a `.res` variable is used to
+function with the notable exception that a \code{.res} variable is used to
 temporarily store the result of each top-level statement.  If any such
 variable exists in the original function code this could cause conflicts.
 }
@@ -30,5 +30,5 @@ dat <- simplify_data(attr(res, 'watch.data'))
 code <- attr(res, 'watch.code')
 }
 \seealso{
-[simplify_data()]j
+\code{\link[=simplify_data]{simplify_data()}}j
 }

@@ -39,26 +39,17 @@ src_lines <- function(x, dat) {
 }
 watch.data <- new.env()
 
-#' Manage Watch Data
-#'
-#' Functions to collect and process watch data.
-#'
-#' @export
+## Manage Watch Data
+##
+## Functions to collect and process watch data.
 
 watch_data <- function() {
   watch.data[['data']]
 }
-
-#' @rdname watch_data
-#' @export
-
 watch_init <- function(vars) {
   watch.data[['data']] <- list()
   watch.data[['vars']] <- vars
 }
-#' @rdname watch_data
-#' @export
-
 capture_data <- function(env, line) {
   dat <- if(length(watch.data[['vars']])) {
     env.vars <- ls(envir=env)
@@ -149,7 +140,7 @@ enmonitor_one <- function(lang, line) {
   call(
     '{',
     call('<-', quote(.res), call("(", lang)),
-    bquote(watcher::capture_data(environment(), .(line))),
+    bquote(watcher:::capture_data(environment(), .(line))),
     quote(.res)
   )
 }
@@ -160,15 +151,32 @@ enmonitor_one <- function(lang, line) {
 #' environment is captured after each top-level statement is evaluated.  The
 #' modifications are designed to minimize changes in the semantics of the
 #' function with the notable exception that a `.res` variable is used to
-#' temporarily store the result of each top-level statement.  If any such
-#' variable exists in the original function code this could cause conflicts.
+#' temporarily store the result of each top-level statement.  If the watched
+#' function also uses the `.res` symbol its semantics will be affected.
 #'
+#' For each top-level step in the evaluation of a watched function a list
+#' element is added to the "watch.data" attribute of the result.  The list will
+#' contain a copy of all the variables in the function environment right after
+#' that step is evaluated, or of the subset of them specified by the `vars`
+#' parameter.  Additionally, the list will contain a "line" attribute that maps
+#' to the start line of the top-level expression that was last evaluated.  This
+#' line number maps to the deparsed function attached to the result as the
+#' "watch.code" attribute.  The line numbers may or may not match to other
+#' deparsings of the function, so if you intend on using the line numbers be
+#' sure to do so in relation to the "watch.code" version of the function.
+#'
+#' @note if you are watching a function from a package you might want to install
+#'   the package with `Sys.setenv('R_KEEP_PKG_SOURCE'='yes')` so that the line
+#'   numbers match the original source, although keep in mind this will make the
+#'   installation larger (see `?options` and search for `keep.source.pkgs`).
 #' @param fun a function to watch
 #' @param vars character a vector of names of variables to record
 #' @return an instrumented version of `fun`.  When this instrumented function is
 #'   run it will add attributes "watch.data" and "watch.code" to the result.
+#'   See the description for details about return data format of the
+#'   instrumented function.
 #'
-#' @seealso [simplify_data()]j
+#' @seealso [simplify_data()], `vignette('watcher', package='watcher')`.
 #' @export
 #' @examples
 #' insert_sort2 <- watch(insert_sort, c('x', 'i', 'j'))
@@ -213,9 +221,9 @@ watch <- function(fun, vars=character()) {
   fun2 <- fun
   fun.body.raw <- enmonitor(body(fun), src.ln)
   fun.body <- bquote({
-    watcher::watch_init(.(vars))
+    watcher:::watch_init(.(vars))
     res <- NULL
-    attr(res, 'watch.data') <- watcher::watch_data()
+    attr(res, 'watch.data') <- watcher:::watch_data()
     attr(res, 'watch.code') <- .(code)
     res
   })

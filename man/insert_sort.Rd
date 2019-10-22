@@ -14,5 +14,5 @@ a sorted vector
 }
 \description{
 For use in examples, taken from
-[wikipedia](#https://en.wikipedia.org/wiki/Insertion_sort)
+\href{#https://en.wikipedia.org/wiki/Insertion_sort}{wikipedia}
 }

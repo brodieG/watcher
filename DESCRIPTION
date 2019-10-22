@@ -16,5 +16,6 @@ LazyData: true
 URL: https://github.com/brodieG/watcher
 BugReports: https://github.com/brodieG/watcher/issues
 RoxygenNote: 6.1.1
+Roxygen: list(markdown = TRUE)
 VignetteBuilder: knitr
 Encoding: UTF-8

@@ -6,7 +6,6 @@ render('README.Rmd', output_format=md_document())
 -->
 ```{r, echo = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
   comment = "##",
   fig.path = "extra/figures/README-", 
   error = TRUE
@@ -14,107 +13,8 @@ knitr::opts_chunk$set(
 ```
 # watcher - Record Function State During Evaluation
 
-## Overview
-
-A mechanism to record function state during evaluation for later analysis.
-Variable values and meta data are recorded for each 'top-level' call.
-
-This is package is experimental and rough around the edges, and was built with
-expediency rather than robustness as the guiding principle.  The API may change
-completely in future iterations if there are any.  More likely there will be no
-future updates to the project, except in the unlikely case it garners
-substantial attention.
-
-## Usage
-
-`watcher` works by "instrumenting" a target function.  Consider a simple
-function that adds the integers up to `n`:
-
-```{r}
-seq_sum <- function(n) {
-  x <- 0
-  for(i in seq_len(n)) {
-    x <- x + i
-  }
-  x
-}
-res0 <- seq_sum(10)
-res0
+```{r child='vignettes/chunks/watcher-contents.Rmd'}
 ```
 
-We can instrument it with `watch`:
-
-```{r}
-seq_sum_w <- watcher::watch(seq_sum)
-seq_sum_w
-```
-
-Each statement is wrapped in brackets, the result is recorded in `.res`, and
-state is recorded with `capture_data`.  This is messy as we add the `.res`
-symbol to the function environment, and modify the return value by adding
-attributes to it, but it worked for my purposes, particularly because I wanted
-to record the environment immediately after each statement[^1].
-
-The function semantics are mostly unchanged:
-
-```{r}
-res1 <- seq_sum_w(10)
-all.equal(res0, res1, check.attributes=FALSE)
-```
-
-Except that the result is augmented with attributes with the watch data:
-
-```{r}
-watch.dat0 <- attr(res1, 'watch.data')
-str(watch.dat0[1:2])
-```
-
-Each step of the function evaluation is recorded as a list element.  This is a
-bit awkward to deal with so we can use `simplify_data` to make the data more
-accessible.  For example, scalar variables are turned into vectors and returned
-as members of the ".scalar" element of the simplified list.  In addition to the
-function variables each step records a `.id` and `.line` scalar variable
-representing respectively the evaluation step, and the line number in the
-function it corresponds to.
-
-```{r state-vs-id}
-watch.dat1 <- watcher::simplify_data(watch.dat0)
-with(watch.dat1$.scalar, plot(.id, x))
-```
-
-With a little work we can combine the line information with the function data to
-juxtapose function state with the code:
-
-![](extra/sort-2.gif)
-
-Unfortunately the process that produces the animation is still quite manual as
-[you can see](extra/sort-2.R).
-
-## Possible Improvements
-
-* Handle nested/recursive calls.  Conceptually this isn't too difficult: we just
-  need to add a call that checks `.res` for the `watch.*` attributes after each
-  top level statement.  Simplification / visualization will be another matter.
-* Protect the symbols used in tracking (i.e. `.res`, `.line`, `.id`) to avoid
-  conflicts with existing variables of the same name (or at least check for
-  conflict).
-* Optimize code; currently we've made no effort to make the code efficient.
-
-## Acknowledgements
-
-* [Jim Hester][1] for the instrumentation concept which I borrowed from
-  [`covr`][2]; if you are interested in writing your own instrumented code
-  please base it off of his and not mine as I just threw something together
-  quickly with little thought.
-* [Thomas Lin Pedersen][3] for [`gganimate`][4] which I used for the insertion
-  sort animation.
-* [Hadley Wickham][5] for [`ggplot`][6].
-
-[^1]: Obviously this could also be done without `.res`, but again, whatever.
-
-[1]: https://github.com/jimhester/
-[2]: https://github.com/r-lib/covr
-[3]: https://github.com/thomasp85
-[4]: https://github.com/thomasp85/gganimate/
-[5]: https://github.com/hadley/
-[6]: https://github.com/tidyverse/ggplot2
+[100]: extra/sort-2.gif
+[101]: extra/sort-2.R

@@ -7,13 +7,13 @@
 simplify_data(dat)
 }
 \arguments{
-\item{dat}{list data produced by a [watch()]ed function.}
+\item{dat}{list data produced by a \code{\link[=watch]{watch()}}ed function.}
 }
 \value{
 list with elements '.scalar' which is a data frame of all the scalar
-  variables with one row per step of the function evaluation, and
-  additionally, one element per matrix/data.frame variable, and one list
-  element for each of all the other variables.
+variables with one row per step of the function evaluation, and
+additionally, one element per matrix/data.frame variable, and one list
+element for each of all the other variables.
 }
 \description{
 Watch data is returned in a list with one element per step of the function
@@ -22,14 +22,16 @@ This function will simplify variables that are either missing or always of
 the same type according to the following rules:
 }
 \details{
-* Scalar values are turned into vectors, NA entries when the variable is not
-  present (e.g. when function begins evaluation in variable is not defined
-  yet)
-* Vectors are turned into data frames with columns .id, .line added.
-* Matrices are turned into data frames with columns .id, .line, x, y, val,
-  where .id is the step id and .line is the code line number.
-* Data frames are rbinded and gain .id and .line variables, if those
-  variables already exist they will be over-written.
+\itemize{
+\item Scalar values are turned into vectors, NA entries when the variable is not
+present (e.g. when function begins evaluation in variable is not defined
+yet)
+\item Vectors are turned into data frames with columns .id, .line added.
+\item Matrices are turned into data frames with columns .id, .line, x, y, val,
+where .id is the step id and .line is the code line number.
+\item Data frames are rbinded and gain .id and .line variables, if those
+variables already exist they will be over-written.
+}
 
 Variables that change types are just stored in their original format in the
 list, except for scalars that change to vectors and vice versa, which are
