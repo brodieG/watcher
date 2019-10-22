@@ -1,7 +1,9 @@
 ## Overview
 
 A mechanism to record function state during evaluation for later analysis.
-Variable values and meta data are recorded for each 'top-level' call.
+Variable values and meta data are recorded for each 'top-level' call.  Top-level
+calls are, roughly speaking, distinct R expressions that are visible directly in
+the source of the R function.
 
 This is package is experimental, rough around the edges, and not currently
 intended for CRAN publication.  It has no tests, and was built with

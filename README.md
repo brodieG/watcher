@@ -12,13 +12,15 @@ Overview
 
 A mechanism to record function state during evaluation for later
 analysis. Variable values and meta data are recorded for each
-‘top-level’ call.
+‘top-level’ call. Top-level calls are, roughly speaking, distinct R
+expressions that are visible directly in the source of the R function.
 
-This is package is experimental and rough around the edges, and was
-built with expediency rather than robustness as the guiding principle.
-The API may change completely in future iterations if there are any.
-More likely there will be no future updates to the project, except in
-the unlikely case it garners substantial attention.
+This is package is experimental, rough around the edges, and not
+currently intended for CRAN publication. It has no tests, and was built
+with expediency rather than robustness as the guiding principle. The API
+may change completely in future iterations if there are any. More likely
+there will be no future updates to the project, except in the unlikely
+case it garners substantial interest from others.
 
 Usage
 -----
@@ -35,58 +37,23 @@ function that adds the integers up to `n`:
     }
     res0 <- seq_sum(10)
     res0
+
     ## [1] 55
 
-We can instrument it with `watch`:
+We can make an instrumented version of it, which will behave mostly as
+the original except the states of the function environment at each
+top-level evaluation step are added to the result as the “watch.data”
+attribute:
 
     seq_sum_w <- watcher::watch(seq_sum)
-    seq_sum_w
-    ## function (n) 
-    ## {
-    ##     watcher::watch_init(character(0))
-    ##     res <- {
-    ##         {
-    ##             .res <- (x <- 0)
-    ##             watcher::capture_data(environment(), 2L)
-    ##             .res
-    ##         }
-    ##         for (i in seq_len(n)) {
-    ##             {
-    ##                 .res <- (x <- x + i)
-    ##                 watcher::capture_data(environment(), 4L)
-    ##                 .res
-    ##             }
-    ##         }
-    ##         {
-    ##             .res <- (x)
-    ##             watcher::capture_data(environment(), 6L)
-    ##             .res
-    ##         }
-    ##     }
-    ##     attr(res, "watch.data") <- watcher::watch_data()
-    ##     attr(res, "watch.code") <- c("function(n) {", "  x <- 0", 
-    ##     "  for(i in seq_len(n)) {", "    x <- x + i", "  }", "  x", 
-    ##     "}")
-    ##     res
-    ## }
-
-Each statement is wrapped in brackets, the result is recorded in `.res`,
-and state is recorded with `capture_data`. This is messy as we add the
-`.res` symbol to the function environment, and modify the return value
-by adding attributes to it, but it worked for my purposes, particularly
-because I wanted to record the environment immediately after each
-statement[1].
-
-The function semantics are mostly unchanged:
-
     res1 <- seq_sum_w(10)
     all.equal(res0, res1, check.attributes=FALSE)
-    ## [1] TRUE
 
-Except that the result is augmented with attributes with the watch data:
+    ## [1] TRUE
 
     watch.dat0 <- attr(res1, 'watch.data')
     str(watch.dat0[1:2])
+
     ## List of 2
     ##  $ :List of 2
     ##   ..$ x: num 0
@@ -101,23 +68,31 @@ Except that the result is augmented with attributes with the watch data:
 Each step of the function evaluation is recorded as a list element. This
 is a bit awkward to deal with so we can use `simplify_data` to make the
 data more accessible. For example, scalar variables are turned into
-vectors and returned as members of the “.scalar” element of the
-simplified list. In addition to the function variables each step records
-a `.id` and `.line` scalar variable representing respectively the
-evaluation step, and the line number in the function it corresponds to.
+vectors and returned as members of the “.scalar” data frame in the
+simplified list.
 
-    watch.dat1 <- watcher::simplify_data(watch.dat0)
-    with(watch.dat1$.scalar, plot(.id, x))
+One possible visualization is to plot variable values vs. evaluation
+step (`.id`):
+
+    suppressPackageStartupMessages(library(ggplot2))
+    watch.dat1 <- watcher::simplify_data(watch.dat0)[['.scalar']]
+    watch.melt <- reshape2::melt(watch.dat1[c('.id', 'x', 'i')], id.vars='.id')
+
+    ggplot(watch.melt, aes(x=.id, y=value, color=variable)) +
+      geom_point()
 
 ![](extra/figures/README-state-vs-id-1.png)
 
+Code And Data
+-------------
+
 With a little work we can combine the line information with the function
-data to juxtapose function state with the code:
+data as we do here with an animation of the insertion sort algorithm:
 
 ![](extra/sort-2.gif)
 
-Unfortunately the process that produces the animation is still quite
-manual as [you can see](extra/sort-2.R).
+For more details on how this is done see the vignette
+(`vignette('watcher', package='watcher')`).
 
 Possible Improvements
 ---------------------
@@ -129,6 +104,8 @@ Possible Improvements
 -   Protect the symbols used in tracking (i.e. `.res`, `.line`, `.id`)
     to avoid conflicts with existing variables of the same name (or at
     least check for conflict).
+-   Automate more of what can be automated, particularly the code / plot
+    juxtaposition.
 -   Optimize code; currently we’ve made no effort to make the code
     efficient.
 
@@ -145,6 +122,3 @@ Acknowledgements
     for the insertion sort animation.
 -   [Hadley Wickham](https://github.com/hadley/) for
     [`ggplot`](https://github.com/tidyverse/ggplot2).
-
-[1] Obviously this could also be done without `.res`, but again,
-whatever.
