@@ -59,7 +59,7 @@ p.anim <- p + transition_manual(.id)
 
 anim_save(
   '~/Downloads/sort-2.gif', nframes=length(dat$.scalar$.id), p.anim,
-  width=width, height=height, fps=3
+  width=width, height=height, fps=5
 )
 
 # res <- animate(
