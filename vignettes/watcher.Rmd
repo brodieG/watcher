@@ -1,0 +1,34 @@
+---
+title: "watcher - Record Function State During Evaluation"
+author: "Brodie Gaslam"
+output:
+    rmarkdown::html_vignette:
+        css: styles.css
+        toc: true
+        fig_width: 7
+        fig_height: 5
+
+vignette: >
+  %\VignetteIndexEntry{watcher}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\usepackage[utf8]{inputenc}
+---
+
+```{r global_options, echo=FALSE}
+knitr::opts_chunk$set(error=TRUE, comment=NA)
+```
+
+```{r child='./chunks/overview.Rmd'}
+```
+```{r child='./chunks/usage.Rmd'}
+```
+```{r child='./chunks/anim.Rmd'}
+```
+```{r child='./chunks/anim-detail.Rmd'}
+```
+```{r child='./chunks/howitworks.Rmd'}
+```
+```{r child='./chunks/post-script.Rmd'}
+```
+
+[100]: ../extra/sort-2.gif

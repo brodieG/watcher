@@ -1,0 +1,30 @@
+## How It Works
+
+Let's examine what our earlier watch sum of sequential integers function looks
+like after watching:
+
+```{r}
+seq_sum_w <- watcher::watch(seq_sum)
+seq_sum_w
+```
+
+Each statement is wrapped in brackets, the result is recorded in `.res`, and
+state is recorded with `capture_data`.  This is messy as we add the `.res`
+symbol to the function environment, and modify the return value by adding
+attributes to it, but it worked for my purposes.  There are other possible
+implementations, several likely to be cleaner, but this is what fell out of my
+brain on the first try and it worked so here it is.
+
+Behind the scenes `watch` also examines the parse data for the function and
+attempts to line up each top-level statement with the corresponding line of the
+deparsed function.  This is the hackiest part of the process and most likely to
+fail as it works directly off of the parse data based on my empirical
+observations of how it behaves.  It would be better to work directly off of the
+`srcref` data for this, but when I threw this together I didn't quite understand
+how nested `srcref` data worked.
+
+If you are interested in instrumenting code in a manner similar to this I
+strongly encourage you examine the code for [Jim Hester's][1] [`covr`][2]
+package rather than this one.  I borrowed the rough concept from there, and I
+have no doubt that implementation is robust, unlike this one.
+

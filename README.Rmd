@@ -1,0 +1,32 @@
+<!-- README.md is generated from README.Rmd. Please edit that file 
+
+library(rmarkdown)
+render('README.Rmd', output_format=md_document())
+
+-->
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  comment = "##",
+  fig.path = "extra/figures/README-", 
+  error = TRUE
+)
+```
+# watcher - Record Function State During Evaluation
+
+```{r child='vignettes/chunks/overview.Rmd'}
+```
+```{r child='vignettes/chunks/usage.Rmd'}
+```
+```{r child='vignettes/chunks/anim.Rmd'}
+```
+
+![][100]
+
+For more details on how this is done see the vignette (`vignette('watcher',
+package='watcher')`).
+
+
+```{r child='vignettes/chunks/post-script.Rmd'}
+```
+
+[100]: extra/sort-2.gif

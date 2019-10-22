@@ -1,0 +1,50 @@
+## Usage
+
+`watcher` works by "instrumenting" a target function.  Consider a simple
+function that adds the integers up to `n`:
+
+```{r}
+seq_sum <- function(n) {
+  x <- 0
+  for(i in seq_len(n)) {
+    x <- x + i
+  }
+  x
+}
+res0 <- seq_sum(10)
+res0
+```
+
+We can make an instrumented version of it, which will behave mostly as the
+original except that the variable values at each top-level evaluation step are
+attached to the result as the "watch.data" attribute:
+
+```{r}
+seq_sum_w <- watcher::watch(seq_sum)
+res1 <- seq_sum_w(10)
+all.equal(res0, res1, check.attributes=FALSE)
+watch.dat0 <- attr(res1, 'watch.data')
+str(watch.dat0[1:2])
+```
+
+Each step of the function evaluation is recorded as a list element.  This is a
+bit awkward to deal with so we can use `simplify_data` to make the data more
+accessible.  For example, scalar variables are turned into vectors and returned
+as members of the ".scalar" data frame in the simplified list.
+
+```{r}
+watch.dat1 <- watcher::simplify_data(watch.dat0)[['.scalar']]
+head(watch.dat1, 2)
+```
+
+One possible visualization is to plot variable values vs. evaluation step
+(`.id`):
+
+```{r state-vs-id, warning=FALSE}
+watch.melt <- reshape2::melt(watch.dat1[c('.id', 'x', 'i')], id.vars='.id')
+suppressPackageStartupMessages(library(ggplot2))
+ggplot(watch.melt, aes(x=.id, y=value, color=variable)) +
+  geom_point()
+```
+
+

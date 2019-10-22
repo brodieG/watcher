@@ -1,172 +1,237 @@
-# This works if wd is the website
 
-# source('static/post/2019-01-11-reverse-polish-notation-parsing-in-r_files/rpn.R')
-
-# We're going to loop through the body, and record start and end lines of
+# Compute Start Line of Each Top-Level Expression
+#
+# We're going to loop through the body, and record start lines of
 # the expressions.  Multi-line expressions are split into sub-expressions.
-# This is lazy as it only works correctly if all expressions except
-# "{" expressions like if, while, etc., are single line.
+#
+# Definitely not fully robust, in particular to exprlist tokens (i.e. those
+# produced by `;` delimited expressions), which kinda work although line numbers
+# are missreported and other issues.
+#
+# @param dat parse data as produced by `getParseData`
+# @param x an id from the parseData `dat` that we wish to examine the children
+#   of.
+# @return a nested list that mimics the structure of the language object that
+#   produced the parse data
 
 src_lines <- function(x, dat) {
-  sub <- subset(dat, parent == x & token == 'expr')
-  rows <- nrow(sub)
-  res <- vector('list', rows)
-
-  for(i in seq_len(rows))
-    res[[i]] <-
-      with(sub[i,], if(line2 - line1 > 0) src_lines(id, dat) else line1)
-  res
+  x.dat <- dat[dat[['id']] == x, ,drop=FALSE]
+  sub <- subset(dat, parent == x)
+  if(!nrow(sub)) stop("no children for ", x)
+  sub.start <- sub[['token']][1L]
+  ctrl.if <- c('WHILE', 'IF')
+  sub.expr <- subset(sub, token == 'expr')
+  if(sub.start %in% c(ctrl.if, "'{'", 'FOR', 'REPEAT') & nrow(sub.expr) > 0) {
+    res <- vector('list', nrow(sub.expr))
+    for(i in seq_len(nrow(sub.expr))) {
+      res[[i]] <- if(sub.start %in% ctrl.if && i == 1) {
+        sub.expr[i, 'line1']
+      } else {
+        src_lines(sub.expr[['id']][[i]], dat)
+      }
+    }
+    res
+  } else if (identical(sub.start, "'{'") && nrow(sub.expr) > 2) {
+    sub.start[2, 'line1']
+  } else {
+    x.dat[['line1']]
+  }
 }
-# Track the monitored values, i, L, and udpate their display when they
-# change.
+watch.data <- new.env()
 
-enmonitor_one <- function(lang, line) {
-  call(
-    '{',
-    call('<-', quote(.res), call("(", lang)),  # eval and temporarily store
-    bquote(refresh_display(.(line))),          # update debug display
-    quote(.res)                                # return temporary value
-  )
+## Manage Watch Data
+##
+## Functions to collect and process watch data.
+
+watch_data <- function() {
+  watch.data[['data']]
 }
+watch_init <- function(vars) {
+  watch.data[['data']] <- list()
+  watch.data[['vars']] <- vars
+}
+capture_data <- function(env, line) {
+  dat <- if(length(watch.data[['vars']])) {
+    env.vars <- ls(envir=env)
+    mget(intersect(watch.data[['vars']], env.vars), envir=env, inherits=FALSE)
+  } else as.list(env)
+
+  attr(dat, 'line') <- line
+  watch.data[['data']] <- append(watch.data[['data']], list(dat))
+  invisible(NULL)
+}
+# Important for `code` and `ln` to be aligned, so we need `src_lines` to
+# correctly determine which elements are nesting vs not, and `enmonitor` to
+# correctly skip the parts that are not part of the nesting.
+#
+# Most annoying thing here is the difference between `for` and `if/while`, and
+# to a lesser extent the differnce between if and if/else (else if is just a
+# nested if/else).
+#
+# Here we compare language objects to the corresponding parse data:
+#
+# for-language (for(i in x) body):
+#
+# 1. `for`
+# 2. `i`                    # skip
+# 3. `x`                    # skip
+# 4. `body`
+#
+# for-dat, subset to FOR/forcond/expr
+#
+# 1. FOR
+# 2. forcond "(i in x)"     # skip
+# 3. body
+#
+# ifelse-language (if(a) b else c)
+#
+# 1. `if`
+# 2. `a`                    # skip
+# 3. `b`
+# 4. `c`                    # optional?
+#
+# ifelse-dat, subset to IF/expr
+#
+# 1. IF
+# 2. a                      # skip
+# 3. b
+# 4. c                      # optional?
+#
+# while is like ifelse without the else, repeat probably similar.
+#
+# We need logic to skip the right elements when computing start lines, and
+# also when "enmonitoring" them.
+
+# Big difference between '{' and the control structures, as for this one
+# the call itself contains everything, whereas for the others??  I guess it's
+# the same, except you have 'if' instead of '{', and then you have to skip stuff
+
 enmonitor <- function(code, ln) {
   i <- j <- 1
   while(i <= length(code)) {
-    while(
-      is.name(code[[i]]) &&
-      as.character(code[[i]]) %in% c("{", "while", "if")
-    )
-      i <- i + 1
-    code[[i]] <- if(is.numeric(ln[[j]])) {
-      enmonitor_one(code[[i]], ln[[j]])
+    if(is.name(code[[i]]) && (length(ln) > 1L || is.list(ln))) {
+      # control structures need to skip their control portion, though
+      # note we don't enter ehere if '{' only contains exprlist
+      symb <- as.character(code[[i]])
+      i <- i +
+        1 * (symb %in% c('{', 'repeat')) +
+        1 * (symb %in% c('if', 'while')) +
+        3 * (symb == 'for')
+    }
+    if(is.numeric(ln[[j]])) {
+      # top level statement, monitor the element
+      if(identical(as.character(code[[i]]), '{')) {
+        # special case of `{` containing exprlist (hack alert)
+        code <- enmonitor_one(code, ln[[j]])
+        break
+      } else {
+        code[[i]] <- enmonitor_one(code[[i]], ln[[j]])
+      }
     } else {
-      enmonitor(code[[i]], ln[[j]])
+      # not top level, so recurse
+      code[[i]] <- enmonitor(code[[i]], ln[[j]])
     }
     i <- i + 1
     j <- j + 1
   }
   code
 }
-make_refresh_display <- function(src, idx.name, L.name, delay=delay) {
-  L.old <- i.chr.init <- character()
-  idx.old <- 0
-
-  fun <- function(n) {
-    if(!length(L.old)) writeLines(c('\n', src))
-    L <- try(get(L.name, envir=parent.frame(), inherits=FALSE), silent=TRUE)
-    idx <- try(get(idx.name, envir=parent.frame(), inherits=FALSE), silent=TRUE)
-
-    if(inherits(L, 'try-error')) L <- list()
-    if(inherits(idx, 'try-error')) idx <- 0
-
-    L.chr <-
-      paste0(" ", vapply(L, deparse, width.cutoff=500, character(1L)), " ")
-    i.chr.pre <- i.chr <- if(!length(i.chr.init)) {
-      i.chr.init <<- sprintf("[[%s]]:", seq_along(L))
-      i.chr.init
-    } else i.chr.init
-
-    stopifnot(length(L.chr) <= length(src))
-
-    del <- which(!L.old %in% L.chr)   # sloppy, only works for unique
-    ins <- which(!L.chr %in% L.old)
-
-    L.chr.pre <- L.old
-    length(L.chr.pre) <- length(L.chr) <- length(i.chr) <- length(i.chr.pre) <-
-      length(src) - 1L
-    L.chr[is.na(L.chr)] <- ""
-    L.chr.pre[is.na(L.chr.pre)] <- ""
-    i.chr[is.na(i.chr)] <- ""
-    i.chr.pre[is.na(i.chr.pre)] <- ""
-
-    idx.ch <- isTRUE(idx != idx.old)
-    flash <- length(del) > 0 || length(ins) > 0 || idx.ch
-
-    if(idx.old) i.chr.pre[idx.old] <-
-      sprintf("\033[7m%s\033[m", i.chr.pre[idx.old])
-    if(idx) i.chr[idx] <-
-      sprintf("\033[7%sm%s\033[m", if(!idx.ch) "" else ";93", i.chr[idx])
-    src <- src.pre <- format(src)
-    src.pre[n] <- sprintf("\033[7m%s\033[m", src[n])
-    src[n] <- sprintf("\033[7%sm%s\033[m", if(!flash) "" else ";93", src[n])
-
-    # Before, highlighting what's about to change
-
-    L.chr.pre[del] <- sprintf("\033[93;7m%s\033[m", L.chr.pre[del])
-
-    if(flash)
-      redraw(
-        paste0(
-          pad(src.pre), "  ",
-          pad(c('`L`', i.chr.pre)),
-          pad(c('', L.chr.pre))
-        ),
-        delay
-      )
-    # After
-
-    L.old <<- L.chr[nzchar(L.chr)]
-    idx.old <<- idx
-
-    if(length(ins)) L.chr[ins] <- sprintf("\033[93;7m%s\033[m", L.chr[ins])
-    redraw(
-      paste0(
-        pad(src), "  ",
-        pad(c('`L`', i.chr)),
-        pad(c('', L.chr))
-      ),
-      delay
-    )
-  }
+enmonitor_one <- function(lang, line) {
+  call(
+    '{',
+    call('<-', quote(.res), call("(", lang)),
+    bquote(watcher:::capture_data(environment(), .(line))),
+    quote(.res)
+  )
 }
-explain <- function(fun, delay=getOption('explain.delay')) {
+
+#' Instrument a Function for Variable Watching
+#'
+#' The input function will be modified such that the state of the function
+#' environment is captured after each top-level statement is evaluated.
+#' Top-level statements are, roughly speaking, distinct R expressions that are
+#' visible directly in the source of the R function.
+#'
+#' For each top-level step in the evaluation of a watched function a list
+#' element is added to the "watch.data" attribute of the result.  The list will
+#' contain a copy of all the variables in the function environment right after
+#' that step is evaluated, or of the subset of them specified by the `vars`
+#' parameter.  Additionally, the list will contain a "line" attribute that maps
+#' to the start line of the top-level expression that was last evaluated.  This
+#' line number maps to the deparsed function attached to the result as the
+#' "watch.code" attribute.  The line numbers may or may not match to other
+#' deparsings of the function, so if you intend on using the line numbers be
+#' sure to do so in relation to the "watch.code" version of the function.
+#'
+#' Instrumented function semantics should be the same as the un-instrumented
+#' version, except for the attributes attached to the return value, and for the
+#' use of the `.res` temporary variable.  If a function also uses the `.res`
+#' symbol the instrumentation will interfere with the original semantics.
+#'
+#' @note if you are watching a function from a package you might want to install
+#'   the package with `Sys.setenv('R_KEEP_PKG_SOURCE'='yes')` so that the line
+#'   numbers match the original source, although keep in mind this will make the
+#'   installation larger (see `?options` and search for `keep.source.pkgs`).
+#' @param fun a function to watch
+#' @param vars character a vector of names of variables to record
+#' @return an instrumented version of `fun`.  When this instrumented function is
+#'   run it will add attributes "watch.data" and "watch.code" to the result.
+#'   See the description for details about return data format of the
+#'   instrumented function.
+#'
+#' @seealso [simplify_data()], `vignette('watcher', package='watcher')`.
+#' @export
+#' @examples
+#' insert_sort2 <- watch(insert_sort, c('x', 'i', 'j'))
+#' res <- insert_sort2(runif(10))
+#' dat <- simplify_data(attr(res, 'watch.data'))
+#' code <- attr(res, 'watch.code')
+
+watch <- function(fun, vars=character()) {
+  stopifnot(is.function(fun), is.character(vars), !anyNA(vars))
   fun.name <- substitute(fun)
   stopifnot(is.name(fun.name))
   fun.name.chr <- as.character(fun.name)
 
-  dat <- getParseData(fun)
-  stopifnot(nrow(dat) > 0)
+  # find function body in parse data.  Pkg funs by default don't keep parse
+  # data, but there are global options that change behavior (search for "keep"
+  # in `?options`.
 
-  symb.parent <- subset(dat, text==fun.name.chr & token == 'SYMBOL')$parent
+  code <- deparse(fun, control='all')
+  dat <- getParseData(fun)
+  if(is.null(dat)) {
+    code[[1]] <- paste0(fun.name.chr, " <- ", code[[1]])
+    dat <- getParseData(parse(text=code))
+  }
+  if(nrow(dat) < 1) stop("Parse data missing.")
+
+  symb.parent <-
+    tail(subset(dat, text==fun.name.chr & token == 'SYMBOL'), 1)$parent
+  if(length(symb.parent) != 1)
+    stop("Failed finding parse data for function ", fun.name.chr)
+
   expr.parent <- subset(dat, id == symb.parent)$parent
   expr.func <- max(subset(dat, parent == expr.parent)$id)
+  expr.func.start <- subset(dat, id == expr.func)[['line1']]
   func.body.id <- max(subset(dat, parent == expr.func & token == 'expr')$id)
 
   src.ln <- src_lines(func.body.id, dat)
-  src.ln <- rapply(
-    src.ln, function(x) x - min(unlist(src.ln)) + 2, how='replace'
-  )
+  src.ln <- if(is.list(src.ln)) {
+    rapply(src.ln, function(x) x - expr.func.start + 1L, how='replace')
+  } else {
+    list(src.ln - expr.func.start + 1L)
+  }
   fun2 <- fun
-  body(fun2) <- enmonitor(body(fun), src.ln)
-
-  refresh_display <- make_refresh_display(
-    deparse(fun, control='all'), 'i', 'L', delay=delay
-  )
-  environment(fun2) <- environment()
+  fun.body.raw <- enmonitor(body(fun), src.ln)
+  fun.body <- bquote({
+    watcher:::watch_init(.(vars))
+    res <- NULL
+    attr(res, 'watch.data') <- watcher:::watch_data()
+    attr(res, 'watch.code') <- .(code)
+    res
+  })
+  fun.body[[3L]][[3L]] <- fun.body.raw
+  body(fun2) <- fun.body
+  # environment(fun2) <- environment()   # is this right?  Doesn't seem so
   fun2
 }
-## Helper funs
-
-## pad with spaces accounting for ANSI CSI
-nchar2 <- function(x) nchar(gsub('\033\\[[^m]*m', '', x))
-pad <- function(x) {
-  chars <- nchar2(x)
-  paste0(x, strrep(" ", max(chars) - chars))
-}
-reset <- function(rows, cols) {
-  whiteout <- rep(strrep(" ", cols), rows)
-  cat(sprintf("\033[%dA\r", rows))
-  writeLines(whiteout)
-  cat(sprintf("\033[%dA\r", rows))
-}
-redraw <- function(out, delay) {
-  reset(length(out) + 1, max(nchar2(out)))
-  writeLines(out)
-  delay_call(delay)
-}
-delay_call <- function(delay) {
-  if(is.function(delay)) delay() else {
-    if(!is.numeric(delay)) delay <- .75
-    Sys.sleep(delay)
-    cat('\n')
-} }
-

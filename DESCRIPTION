@@ -1,0 +1,21 @@
+Package: watcher
+Type: Package
+Title: Watch Function State
+Description: Tools to instrument functions so that their state may be captured
+  at each evaluation step.  The resulting data can be analyzed to better
+  understand the behavior of the function.
+Version: 0.0.1
+Authors@R: c(
+    person(
+    "Brodie", "Gaslam", email="brodie.gaslam@yahoo.com",
+    role=c("aut", "cre")))
+Depends:
+    R (>= 3.1.0)
+License: GPL (>= 2)
+LazyData: true
+URL: https://github.com/brodieG/watcher
+BugReports: https://github.com/brodieG/watcher/issues
+RoxygenNote: 6.1.1
+Roxygen: list(markdown = TRUE)
+VignetteBuilder: knitr
+Encoding: UTF-8
