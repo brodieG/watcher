@@ -4,6 +4,9 @@ author: "Brodie Gaslam"
 output:
     rmarkdown::html_vignette:
         css: styles.css
+        toc: true
+        fig_width: 7
+        fig_height: 5
 
 vignette: >
   %\VignetteIndexEntry{watcher}
@@ -15,8 +18,17 @@ vignette: >
 knitr::opts_chunk$set(error=TRUE, comment=NA)
 ```
 
-```{r child='./chunks/watcher-contents.Rmd'}
+```{r child='./chunks/overview.Rmd'}
+```
+```{r child='./chunks/usage.Rmd'}
+```
+```{r child='./chunks/anim.Rmd'}
+```
+```{r child='./chunks/anim-detail.Rmd'}
+```
+```{r child='./chunks/howitworks.Rmd'}
+```
+```{r child='./chunks/post-script.Rmd'}
 ```
 
 [100]: ../extra/sort-2.gif
-[101]: ../extra/sort-2.R

@@ -5,12 +5,12 @@
 #' This function will simplify variables that are either missing or always of
 #' the same type according to the following rules:
 #'
-#' * Scalar values are turned into vectors, NA entries when the variable is not
-#'   present (e.g. when function begins evaluation in variable is not defined
-#'   yet)
-#' * Vectors are turned into data frames with columns .id, .line added.
-#' * Matrices are turned into data frames with columns .id, .line, x, y, val,
-#'   where .id is the step id and .line is the code line number.
+#' * Scalar values are turned into vectors and returned as a column of the
+#'   ".scalar" data.frame member of the result.  Variables that are not defined
+#'   at every step of the evaluation will be recorded as NA for those steps.
+#' * Vectors are turned into data frames with columns `.id`, `.line` added.
+#' * Matrices are turned into data frames with columns `.id`, `.line`, x, y,
+#'   val, where `.id` is the step id and `.line` is the code line number.
 #' * Data frames are rbinded and gain .id and .line variables, if those
 #'   variables already exist they will be over-written.
 #'
@@ -20,11 +20,19 @@
 #'
 #' Not optimized for speed.
 #'
-#' @param dat list data produced by a [watch()]ed function.
-#' @return list with elements '.scalar' which is a data frame of all the scalar
-#'   variables with one row per step of the function evaluation, and
+#' Due to the use of the ".scalar", ".id", and ".line" symbols as part of the
+#' simplification, the simplification will fail if the watched function contains
+#' those symbols.  No effort is made to check for that condition.
+#'
+#' @seealso [watch()], [expand_text()]
+#' @param dat list the "watch.data" attribute as produced by a [watch()]ed
+#'   function.
+#' @return list with elements '.scalar' which is a data frame of all
+#'   the scalar variables with one row per step of the function evaluation, and
 #'   additionally, one element per matrix/data.frame variable, and one list
-#'   element for each of all the other variables.
+#'   element for each of all the other variables.  Except for the ".scalar"
+#'   element, each top-level element of the return value retains the name of the
+#'   variable it corresponds to.
 #' @export
 
 simplify_data <- function(dat) {
@@ -73,7 +81,7 @@ simplify_data <- function(dat) {
     vector('list', length(vars[type != 'scalar']) + 1L),
     c('.scalar', vars[type != 'scalar'])
   )
-  res[['.scalar']] <- res.scalar
+  res[['.scalar']] <- as.data.frame(res.scalar)
   for(i in vars[type == 'matrix']) {
     tmp <- lapply(
       seq_along(dat), function(j) {
@@ -99,6 +107,10 @@ simplify_data <- function(dat) {
 }
 #' Expand Deparsed Code
 #'
+#' Aligns the "watch.code" data with the simplified "watch.data" by generating a
+#' copy of "watch.code" for each step of the evaluation, and indicating which
+#' line evaluation led to the corresponding state.
+#'
 #' Probably should be made part of [simplify_data()].  Not optimized.
 #'
 #' @param code the deparsed code code matching the watch data
@@ -106,7 +118,7 @@ simplify_data <- function(dat) {
 #' @return data frame with the deparsed code repeated for each step of the
 #'   function evaluation, with the line that was just evaluated marked with a
 #'   TRUE in the `highlight` column.
-#' @seealso [simplify_data()]
+#' @seealso [watch()], [simplify_data()]
 #' @export
 
 expand_text <- function(code, data) {

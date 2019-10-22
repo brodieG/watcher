@@ -7,13 +7,16 @@
 simplify_data(dat)
 }
 \arguments{
-\item{dat}{list data produced by a \code{\link[=watch]{watch()}}ed function.}
+\item{dat}{list the "watch.data" attribute as produced by a \code{\link[=watch]{watch()}}ed
+function.}
 }
 \value{
-list with elements '.scalar' which is a data frame of all the scalar
-variables with one row per step of the function evaluation, and
+list with elements '.scalar' which is a data frame of all
+the scalar variables with one row per step of the function evaluation, and
 additionally, one element per matrix/data.frame variable, and one list
-element for each of all the other variables.
+element for each of all the other variables.  Except for the ".scalar"
+element, each top-level element of the return value retains the name of the
+variable it corresponds to.
 }
 \description{
 Watch data is returned in a list with one element per step of the function
@@ -23,12 +26,12 @@ the same type according to the following rules:
 }
 \details{
 \itemize{
-\item Scalar values are turned into vectors, NA entries when the variable is not
-present (e.g. when function begins evaluation in variable is not defined
-yet)
-\item Vectors are turned into data frames with columns .id, .line added.
-\item Matrices are turned into data frames with columns .id, .line, x, y, val,
-where .id is the step id and .line is the code line number.
+\item Scalar values are turned into vectors and returned as a column of the
+".scalar" data.frame member of the result.  Variables that are not defined
+at every step of the evaluation will be recorded as NA for those steps.
+\item Vectors are turned into data frames with columns \code{.id}, \code{.line} added.
+\item Matrices are turned into data frames with columns \code{.id}, \code{.line}, x, y,
+val, where \code{.id} is the step id and \code{.line} is the code line number.
 \item Data frames are rbinded and gain .id and .line variables, if those
 variables already exist they will be over-written.
 }
@@ -38,4 +41,11 @@ list, except for scalars that change to vectors and vice versa, which are
 treated as vectors.
 
 Not optimized for speed.
+
+Due to the use of the ".scalar", ".id", and ".line" symbols as part of the
+simplification, the simplification will fail if the watched function contains
+those symbols.  No effort is made to check for that condition.
+}
+\seealso{
+\code{\link[=watch]{watch()}}, \code{\link[=expand_text]{expand_text()}}
 }

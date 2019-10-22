@@ -13,8 +13,20 @@ knitr::opts_chunk$set(
 ```
 # watcher - Record Function State During Evaluation
 
-```{r child='vignettes/chunks/watcher-contents.Rmd'}
+```{r child='vignettes/chunks/overview.Rmd'}
+```
+```{r child='vignettes/chunks/usage.Rmd'}
+```
+```{r child='vignettes/chunks/anim.Rmd'}
+```
+
+![][100]
+
+For more details on how this is done see the vignette (`vignette('watcher',
+package='watcher')`).
+
+
+```{r child='vignettes/chunks/post-script.Rmd'}
 ```
 
 [100]: extra/sort-2.gif
-[101]: extra/sort-2.R

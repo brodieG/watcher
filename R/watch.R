@@ -148,11 +148,9 @@ enmonitor_one <- function(lang, line) {
 #' Instrument a Function for Variable Watching
 #'
 #' The input function will be modified such that the state of the function
-#' environment is captured after each top-level statement is evaluated.  The
-#' modifications are designed to minimize changes in the semantics of the
-#' function with the notable exception that a `.res` variable is used to
-#' temporarily store the result of each top-level statement.  If the watched
-#' function also uses the `.res` symbol its semantics will be affected.
+#' environment is captured after each top-level statement is evaluated.
+#' Top-level statements are, roughly speaking, distinct R expressions that are
+#' visible directly in the source of the R function.
 #'
 #' For each top-level step in the evaluation of a watched function a list
 #' element is added to the "watch.data" attribute of the result.  The list will
@@ -164,6 +162,11 @@ enmonitor_one <- function(lang, line) {
 #' "watch.code" attribute.  The line numbers may or may not match to other
 #' deparsings of the function, so if you intend on using the line numbers be
 #' sure to do so in relation to the "watch.code" version of the function.
+#'
+#' Instrumented function semantics should be the same as the un-instrumented
+#' version, except for the attributes attached to the return value, and for the
+#' use of the `.res` temporary variable.  If a function also uses the `.res`
+#' symbol the instrumentation will interfere with the original semantics.
 #'
 #' @note if you are watching a function from a package you might want to install
 #'   the package with `Sys.setenv('R_KEEP_PKG_SOURCE'='yes')` so that the line

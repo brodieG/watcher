@@ -17,8 +17,13 @@ function evaluation, with the line that was just evaluated marked with a
 TRUE in the \code{highlight} column.
 }
 \description{
+Aligns the "watch.code" data with the simplified "watch.data" by generating a
+copy of "watch.code" for each step of the evaluation, and indicating which
+line evaluation led to the corresponding state.
+}
+\details{
 Probably should be made part of \code{\link[=simplify_data]{simplify_data()}}.  Not optimized.
 }
 \seealso{
-\code{\link[=simplify_data]{simplify_data()}}
+\code{\link[=watch]{watch()}}, \code{\link[=simplify_data]{simplify_data()}}
 }

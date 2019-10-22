@@ -1,0 +1,28 @@
+## Possible Improvements
+
+* Handle nested/recursive calls.  Conceptually this isn't too difficult: we just
+  need to add a call that checks `.res` for the `watch.*` attributes after each
+  top level statement.  Simplification / visualization will be another matter.
+* Protect the symbols used in tracking (i.e. `.res`, `.line`, `.id`) to avoid
+  conflicts with existing variables of the same name (or at least check for
+  conflict).
+* Automate more of what can be automated, particularly the code / plot
+  juxtaposition.
+* Optimize code; currently we've made no effort to make the code efficient.
+
+## Acknowledgements
+
+* [Jim Hester][1] for the instrumentation concept which I borrowed from
+  [`covr`][2]; if you are interested in writing your own instrumented code
+  please base it off of his and not mine as I just threw something together
+  quickly with little thought.
+* [Thomas Lin Pedersen][3] for [`gganimate`][4] which I used for the insertion
+  sort animation.
+* [Hadley Wickham][5] for [`ggplot`][6].
+
+[1]: https://github.com/jimhester/
+[2]: https://github.com/r-lib/covr
+[3]: https://github.com/thomasp85
+[4]: https://github.com/thomasp85/gganimate/
+[5]: https://github.com/hadley/
+[6]: https://github.com/tidyverse/ggplot2

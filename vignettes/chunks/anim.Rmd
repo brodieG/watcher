@@ -1,0 +1,5 @@
+## Code And Data
+
+With a little work we can combine the line information with the function data as
+we do here with an animation of the insertion sort algorithm:
+
