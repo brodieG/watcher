@@ -201,7 +201,9 @@ watch <- function(fun, vars=character()) {
   dat <- getParseData(fun)
   if(is.null(dat)) {
     code[[1]] <- paste0(fun.name.chr, " <- ", code[[1]])
-    dat <- getParseData(parse(text=code))
+    old.opt <- options(keep.parse.data=TRUE)
+    on.exit(options(old.opt))
+    dat <- getParseData(parse(text=code, keep.source=TRUE))
   }
   if(nrow(dat) < 1) stop("Parse data missing.")
 
