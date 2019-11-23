@@ -22,6 +22,9 @@ may change completely in future iterations if there are any. More likely
 there will be no future updates to the project, except in the unlikely
 case it garners substantial interest from others.
 
+See the [issues page](https://github.com/brodieG/watcher/issues) for
+known limitations.
+
 Usage
 -----
 
